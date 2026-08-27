@@ -659,8 +659,8 @@ with st.expander("✨ 拋光 / 電鍍", expanded=False):
             sub_d += 150
     elif "$400" in polish_choice:
         sub_d += 400
-        if st.checkbox("附加電鍍 +$150", key='p_add_plate'):
-            sub_d += 150
+        if st.checkbox("附加電鍍 +$200", key='p_add_plate'):
+            sub_d += 200
 
     st.divider()
     st.write("**其他電鍍選項**")
