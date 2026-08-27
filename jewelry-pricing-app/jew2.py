@@ -8,7 +8,7 @@ import base64
 from bs4 import BeautifulSoup
 
 # --- 頁面設定 ---
-st.set_page_config(page_title="金工報價系統", layout="centered")
+st.set_page_config(page_title="代工報價系統", layout="centered")
 
 # --- 1. 價格與計算邏輯 ---
 def calculate_jewelry_fee(w, m):
@@ -247,7 +247,7 @@ def cb_add_bare():  _add('bare_rows')
 def cb_del_bare():  _del('bare_rows')
 
 # --- 3. UI 介面 ---
-st.markdown("<h1 style='text-align: center;'>今日金價</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center;'>收費計算</h1>", unsafe_allow_html=True)
 
 # 自動抓取 + 客戶名稱（同一行）
 fetch_col, name_col = st.columns([2, 3])
