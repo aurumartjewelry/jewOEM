@@ -1,0 +1,7 @@
+streamlit
+pandas
+openpyxl
+requests
+beautifulsoup4
+pip install streamlit requests beautifulsoup4 pandas
+streamlit run ring_resize_calculator_streamlit.py
