@@ -664,32 +664,40 @@ with st.expander("💍 改圍加價", expanded=(section_nav == "💍 改圍加�
             rb3, rb4 = st.columns(2)
             resize_width = rb3.number_input("戒腳寬度（mm）", min_value=0.0, value=2.0, step=0.01, format="%.2f", key="resize_width_mm")
             resize_thickness = rb4.number_input("戒腳厚度（mm）", min_value=0.0, value=1.7, step=0.01, format="%.2f", key="resize_thickness_mm")
-            resize_factor = st.number_input(
-                "綜合補料係數（加工 × 損耗）", min_value=1.0, value=1.5525,
-                step=0.01, format="%.4f", key="resize_combined_factor",
-                help="預設值沿用原本加工係數 1.15 × 補料損耗係數 1.35。",
+            resize_loss_factor = st.number_input(
+                "補料係數（含損耗）", min_value=1.0, value=1.35,
+                step=0.01, format="%.2f", key="resize_loss_factor",
+                help="加工係數 1.15 已用於補料重量估算；此係數再套用於金料金額。",
             )
             theoretical_resize_g, estimated_resize_qian = estimate_resize_gold_qian(
                 resize_from, resize_to, resize_width, resize_thickness,
-                _RING_DENSITY[b_mat2], resize_factor,
+                _RING_DENSITY[b_mat2], 1.15,
             )
             use_estimated_resize_weight = st.checkbox(
-                "使用戒圍估算的補料金料重量", value=True, key="use_estimated_resize_weight",
-                help="依號數差、戒腳寬厚、成色密度與綜合補料係數估算；取消勾選可自行輸入重量。",
+                "使用戒圍估算重量", value=True, key="use_estimated_resize_weight",
+                help="估算重量含加工係數 1.15；取消勾選後可使用下方手動重量欄位。",
             )
             if resize_to > resize_from and resize_width > 0 and resize_thickness > 0:
-                st.caption(f"理論增重約 {theoretical_resize_g:.3f} g；建議投入補料約 {estimated_resize_qian:.3f} 錢（綜合係數 {resize_factor:.4f}）。")
+                st.caption(f"理論增重約 {theoretical_resize_g:.3f} g；含加工係數後建議投入補料約 {estimated_resize_qian:.3f} 錢。")
             if use_estimated_resize_weight:
                 bw = estimated_resize_qian
-                st.metric("採用補料金料", f"{bw:.3f} 錢")
             else:
-                bw = st.number_input("手動補料金料（錢）", min_value=0.0, step=0.001, format="%.3f", key='big_w_manual')
+                bw = st.session_state.get("big_w_manual", estimated_resize_qian)
+            manual_bw = st.number_input(
+                "補料金料重量（錢）", min_value=0.0, value=float(estimated_resize_qian),
+                step=0.001, format="%.3f", key='big_w_manual',
+                disabled=use_estimated_resize_weight,
+                help="切換為手動輸入後可在此填寫實際補金料重量。",
+            )
+            if not use_estimated_resize_weight:
+                bw = manual_bw
+            st.caption(f"目前計價補料金料：{bw:.3f} 錢")
             b_base = get_material_base_price(b_mat2, g_sell, p_sell_pt)
-            b_unit = int(b_base)
+            b_unit = int(b_base * resize_loss_factor)
             b_amt  = int(bw * b_unit)
             st.metric("估算金料金額", f"${b_amt:,}", help=f"單價/錢: ${b_unit}")
             sub_c += b_amt
-            resize_gold_desc = f"{b_mat2}{bw:.3f}錢=${b_amt}（# {resize_from:g}→# {resize_to:g}；綜合係數 {resize_factor:.4f}）" if bw > 0 else f"# {resize_from:g}→# {resize_to:g}"
+            resize_gold_desc = f"{b_mat2}{bw:.3f}錢×{resize_loss_factor:.2f}=${b_amt}（# {resize_from:g}→# {resize_to:g}）" if bw > 0 else f"# {resize_from:g}→# {resize_to:g}"
         else:
             resize_gold_desc = ""
         if resize_gold_desc:
@@ -921,13 +929,14 @@ if st.session_state.get('do_resize', False) and st.session_state.get('r_big', Fa
             st.session_state.get("resize_width_mm", 2.0),
             st.session_state.get("resize_thickness_mm", 1.7),
             _RING_DENSITY.get(st.session_state.get('big_mat2', '18K(750)'), 15.6),
-            st.session_state.get("resize_combined_factor", 1.5525),
+            1.15,
         )
     else:
         bw_val = st.session_state.get('big_w_manual', 0.0)
     b_mat2_val = st.session_state.get('big_mat2', '18K(750)')
     b_base_val = get_material_base_price(b_mat2_val, g_sell, p_sell_pt)
-    resize_gold = int(bw_val * int(b_base_val))
+    resize_loss_val = st.session_state.get("resize_loss_factor", 1.35)
+    resize_gold = int(bw_val * int(b_base_val * resize_loss_val))
 
 comb_w_val    = st.session_state.get('comb_w', 0.0)
 comb_loss_val = st.session_state.get('comb_loss', 1.35)
