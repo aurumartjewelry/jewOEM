@@ -664,21 +664,27 @@ with st.expander("💍 改圍加價", expanded=(section_nav == "💍 改圍加�
             rb3, rb4 = st.columns(2)
             resize_width = rb3.number_input("戒腳寬度（mm）", min_value=0.0, value=2.0, step=0.01, format="%.2f", key="resize_width_mm")
             resize_thickness = rb4.number_input("戒腳厚度（mm）", min_value=0.0, value=1.7, step=0.01, format="%.2f", key="resize_thickness_mm")
-            resize_loss_factor = st.number_input(
-                "補料係數（含損耗）", min_value=1.0, value=1.35,
+            factor_col1, factor_col2 = st.columns(2)
+            resize_process_factor = factor_col1.number_input(
+                "加工係數", min_value=1.0, value=1.15,
+                step=0.01, format="%.2f", key="resize_process_factor",
+                help="只套用在建議補料重量估算。",
+            )
+            resize_loss_factor = factor_col2.number_input(
+                "補料損耗係數", min_value=1.0, value=1.35,
                 step=0.01, format="%.2f", key="resize_loss_factor",
-                help="加工係數 1.15 已用於補料重量估算；此係數再套用於金料金額。",
+                help="只套用在金料金額計算。",
             )
             theoretical_resize_g, estimated_resize_qian = estimate_resize_gold_qian(
                 resize_from, resize_to, resize_width, resize_thickness,
-                _RING_DENSITY[b_mat2], 1.15,
+                _RING_DENSITY[b_mat2], resize_process_factor,
             )
             use_estimated_resize_weight = st.checkbox(
                 "使用戒圍估算重量", value=True, key="use_estimated_resize_weight",
-                help="估算重量含加工係數 1.15；取消勾選後可使用下方手動重量欄位。",
+                help="估算重量套用加工係數；取消勾選後可使用下方手動重量欄位。",
             )
             if resize_to > resize_from and resize_width > 0 and resize_thickness > 0:
-                st.caption(f"理論增重約 {theoretical_resize_g:.3f} g；含加工係數後建議投入補料約 {estimated_resize_qian:.3f} 錢。")
+                st.caption(f"理論增重約 {theoretical_resize_g:.3f} g；套用加工係數 {resize_process_factor:.2f} 後，建議投入補料約 {estimated_resize_qian:.3f} 錢。")
             if use_estimated_resize_weight:
                 bw = estimated_resize_qian
             else:
@@ -697,7 +703,7 @@ with st.expander("💍 改圍加價", expanded=(section_nav == "💍 改圍加�
             b_amt  = int(bw * b_unit)
             st.metric("估算金料金額", f"${b_amt:,}", help=f"單價/錢: ${b_unit}")
             sub_c += b_amt
-            resize_gold_desc = f"{b_mat2}{bw:.3f}錢×{resize_loss_factor:.2f}=${b_amt}（# {resize_from:g}→# {resize_to:g}）" if bw > 0 else f"# {resize_from:g}→# {resize_to:g}"
+            resize_gold_desc = f"{b_mat2}{bw:.3f}錢×損耗{resize_loss_factor:.2f}=${b_amt}（加工{resize_process_factor:.2f}；# {resize_from:g}→# {resize_to:g}）" if bw > 0 else f"# {resize_from:g}→# {resize_to:g}"
         else:
             resize_gold_desc = ""
         if resize_gold_desc:
@@ -929,7 +935,7 @@ if st.session_state.get('do_resize', False) and st.session_state.get('r_big', Fa
             st.session_state.get("resize_width_mm", 2.0),
             st.session_state.get("resize_thickness_mm", 1.7),
             _RING_DENSITY.get(st.session_state.get('big_mat2', '18K(750)'), 15.6),
-            1.15,
+            st.session_state.get("resize_process_factor", 1.15),
         )
     else:
         bw_val = st.session_state.get('big_w_manual', 0.0)
