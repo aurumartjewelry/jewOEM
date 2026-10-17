@@ -14,7 +14,8 @@ st.set_page_config(page_title="金工報價系統", layout="wide")
 st.markdown("""
 <style>
   .block-container { max-width: 1120px; padding-top: 1.4rem; padding-bottom: 6rem; }
-  [data-testid="stMetric"] { background: #f7f8fa; border: 1px solid #e7e9ee; border-radius: 12px; padding: 12px 14px; }
+  [data-testid="stMetric"] { background: var(--secondary-background-color); color: var(--text-color); border: 1px solid rgba(128, 128, 128, .28); border-radius: 12px; padding: 12px 14px; }
+  [data-testid="stMetricLabel"], [data-testid="stMetricValue"], [data-testid="stMetricDelta"] { color: var(--text-color) !important; }
   [data-testid="stExpander"] { border: 1px solid #e6e8ec; border-radius: 14px; margin: 10px 0; overflow: hidden; }
   [data-testid="stExpander"] summary { min-height: 52px; font-weight: 700; }
   [data-testid="stButton"] button, [data-testid="stDownloadButton"] button { min-height: 48px; border-radius: 10px; font-weight: 650; }
@@ -1156,3 +1157,4 @@ if st.session_state.records:
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True
     )
+
