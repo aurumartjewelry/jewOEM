@@ -5,6 +5,7 @@ import io
 import requests
 import json
 import base64
+import math
 from bs4 import BeautifulSoup
 
 # --- 頁面設定 ---
@@ -68,6 +69,28 @@ def get_material_base_price(mat, g_sell, p_sell_pt):
     elif mat == "Pt950":
         return p_sell_pt
     return 0.0
+
+# 戒圍改大補料金料估算：沿用 ring_resize_calculator.py 的戒圍表與體積公式
+_RING_DIAMETER_MM = {
+    3: 12.8, 3.5: 13.0, 4: 13.2, 4.5: 13.5, 5: 13.8, 5.5: 14.0,
+    6: 14.2, 6.5: 14.4, 7: 14.7, 7.5: 14.9, 8: 15.2, 8.5: 15.4,
+    9: 15.7, 9.5: 15.9, 10: 16.2, 10.5: 16.5, 11: 16.6, 11.5: 16.9,
+    12: 17.1, 12.5: 17.3, 13: 17.6, 13.5: 17.9, 14: 18.0, 14.5: 18.4,
+    15: 18.7, 15.5: 18.9, 16: 19.1, 16.5: 19.3, 17: 19.7, 17.5: 20.0,
+    18: 20.2, 18.5: 20.4, 19: 20.7, 19.5: 20.9, 20: 21.2, 20.5: 21.4,
+    21: 21.7, 21.5: 22.0, 22: 22.3, 22.5: 22.5, 23: 22.7, 23.5: 23.0,
+    24: 23.2, 24.5: 23.5,
+}
+_RING_DENSITY = {"18K(750)": 15.6, "14K(585)": 13.2, "9K(375)": 11.0, "Pt950": 21.45}
+
+def estimate_resize_gold_qian(from_size, to_size, width_mm, thickness_mm, density, factor):
+    """按戒圍周長差與戒腳截面估算投入補料金料（錢）。"""
+    if to_size <= from_size or width_mm <= 0 or thickness_mm <= 0:
+        return 0.0, 0.0
+    added_circumference = (_RING_DIAMETER_MM[to_size] - _RING_DIAMETER_MM[from_size]) * math.pi
+    theoretical_g = width_mm * thickness_mm * added_circumference * density / 1000
+    recommended_g = theoretical_g * factor
+    return theoretical_g, recommended_g / 3.75
 
 @st.cache_data(ttl=300)  # 快取 5 分鐘，避免重複抓取
 def fetch_allbeauty_prices():
@@ -617,6 +640,16 @@ with st.expander("💍 改圍加價", expanded=(section_nav == "💍 改圍加�
     sub_c = 0
     if do_resize:
         sub_c = 300
+        size_options = sorted(_RING_DIAMETER_MM)
+        size_col1, size_col2 = st.columns(2)
+        resize_from = size_col1.selectbox(
+            "改圍前號數", size_options, index=size_options.index(12),
+            format_func=lambda s: f"#{s:g}", key="resize_from_size",
+        )
+        resize_to = size_col2.selectbox(
+            "改圍後號數", size_options, index=size_options.index(14),
+            format_func=lambda s: f"#{s:g}", key="resize_to_size",
+        )
         c1, c2 = st.columns(2)
         if c1.checkbox("白金 +100", key='r_plat'): sub_c += 100
         if c2.checkbox("寬版 +100", key='r_wide'): sub_c += 100
@@ -624,22 +657,43 @@ with st.expander("💍 改圍加價", expanded=(section_nav == "💍 改圍加�
         if c2.checkbox("拆石回鑲(珊瑚、珍珠) +100", key='r_full'): sub_c += 100
         if st.checkbox("改大 +200", key='r_big'):
             sub_c += 200
-            rb1, rb2, rb3, rb4 = st.columns([2, 2, 2, 2])
-            b_mat2 = rb1.selectbox("成色", ["18K(750)", "14K(585)", "9K(375)", "Pt950"], key='big_mat2')
-            bw     = rb2.number_input("金料(錢)", min_value=0.0, step=0.001, format="%.3f", key='big_w')
-            b_loss = rb3.number_input("損耗", min_value=1.0, max_value=2.0, value=1.35, step=0.01, key='big_loss')
+            if resize_to <= resize_from:
+                st.warning("改大時，改圍後號數需大於改圍前號數；請調整號數以估算補料金料。")
+            rb1, rb2 = st.columns(2)
+            b_mat2 = rb1.selectbox("補料金料成色", ["18K(750)", "14K(585)", "9K(375)", "Pt950"], key='big_mat2')
+            rb3, rb4 = st.columns(2)
+            resize_width = rb3.number_input("戒腳寬度（mm）", min_value=0.0, value=2.0, step=0.01, format="%.2f", key="resize_width_mm")
+            resize_thickness = rb4.number_input("戒腳厚度（mm）", min_value=0.0, value=1.7, step=0.01, format="%.2f", key="resize_thickness_mm")
+            rb5, rb6 = st.columns(2)
+            resize_factor = rb5.number_input("加工係數", min_value=1.0, value=1.15, step=0.01, format="%.2f", key="resize_factor")
+            b_loss = rb6.number_input("補料損耗係數", min_value=1.0, max_value=2.0, value=1.35, step=0.01, key='big_loss')
+            theoretical_resize_g, estimated_resize_qian = estimate_resize_gold_qian(
+                resize_from, resize_to, resize_width, resize_thickness,
+                _RING_DENSITY[b_mat2], resize_factor,
+            )
+            use_estimated_resize_weight = st.checkbox(
+                "使用戒圍估算的補料金料重量", value=True, key="use_estimated_resize_weight",
+                help="依號數差、戒腳寬厚、成色密度與加工係數估算；取消勾選可自行輸入重量。",
+            )
+            if resize_to > resize_from and resize_width > 0 and resize_thickness > 0:
+                st.caption(f"理論增重約 {theoretical_resize_g:.3f} g；建議投入補料約 {estimated_resize_qian:.3f} 錢（加工係數 {resize_factor:.2f}）。")
+            if use_estimated_resize_weight:
+                bw = estimated_resize_qian
+                st.metric("採用補料金料", f"{bw:.3f} 錢")
+            else:
+                bw = st.number_input("手動補料金料（錢）", min_value=0.0, step=0.001, format="%.3f", key='big_w_manual')
             b_base = get_material_base_price(b_mat2, g_sell, p_sell_pt)
             b_unit = int(b_base * b_loss)
             b_amt  = int(bw * b_unit)
-            rb4.metric("金料金額", f"${b_amt}", help=f"單價/錢: ${b_unit}")
+            st.metric("估算金料金額", f"${b_amt:,}", help=f"單價/錢: ${b_unit}")
             sub_c += b_amt
-            resize_gold_desc = f"{b_mat2}{bw:.3f}錢×{b_loss}=${b_amt}" if bw > 0 else ""
+            resize_gold_desc = f"{b_mat2}{bw:.3f}錢×{b_loss}=${b_amt}（# {resize_from:g}→# {resize_to:g}）" if bw > 0 else f"# {resize_from:g}→# {resize_to:g}"
         else:
             resize_gold_desc = ""
         if resize_gold_desc:
             details.append(f"改圍(工費${int(sub_c - b_amt)}|金{resize_gold_desc}|總${int(sub_c)})")
         else:
-            details.append(f"改圍(${int(sub_c)})")
+            details.append(f"改圍(# {resize_from:g}→# {resize_to:g}, ${int(sub_c)})")
         simple_details.append("改圍")
     st.write(f"**改圍小計: ${int(sub_c)}**")
     total_sum += sub_c
@@ -858,7 +912,17 @@ def walkin_loss_add(mat):
 # ── 計算各區塊金料（不加倍部分）──
 resize_gold = 0
 if st.session_state.get('do_resize', False) and st.session_state.get('r_big', False):
-    bw_val     = st.session_state.get('big_w', 0.0)
+    if st.session_state.get("use_estimated_resize_weight", True):
+        _, bw_val = estimate_resize_gold_qian(
+            st.session_state.get("resize_from_size", 12),
+            st.session_state.get("resize_to_size", 14),
+            st.session_state.get("resize_width_mm", 2.0),
+            st.session_state.get("resize_thickness_mm", 1.7),
+            _RING_DENSITY.get(st.session_state.get('big_mat2', '18K(750)'), 15.6),
+            st.session_state.get("resize_factor", 1.15),
+        )
+    else:
+        bw_val = st.session_state.get('big_w_manual', 0.0)
     b_loss_val = st.session_state.get('big_loss', 1.35)
     b_mat2_val = st.session_state.get('big_mat2', '18K(750)')
     b_base_val = get_material_base_price(b_mat2_val, g_sell, p_sell_pt)
@@ -1019,6 +1083,8 @@ with col_btn2:
             "工時": wt_str if work_min > 0 else "",
             "收貨重量": f"{recv_weight:.3f}錢" if recv_weight > 0 else "",
             "出貨重量": f"{ship_weight:.3f}錢" if ship_weight > 0 else "",
+            "改圍前號數": f"#{st.session_state.get('resize_from_size'):g}" if st.session_state.get('do_resize', False) else "",
+            "改圍後號數": f"#{st.session_state.get('resize_to_size'):g}" if st.session_state.get('do_resize', False) else "",
             "報價模式": "零售維修" if is_retail_repair else ("零售新訂" if is_walkin else "一般"),
             "入庫備注": " ".join(bare_cost_note) if bare_cost_note else "",
             "客戶備註": note,
