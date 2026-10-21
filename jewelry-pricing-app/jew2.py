@@ -902,6 +902,7 @@ with st.expander("✨ 拋光 / 電鍍", expanded=(section_nav == "✨ 拋光 / �
     ca1, ca2 = st.columns(2)
     # 左側：白金、雙色、噴砂/拉砂
     if ca1.checkbox("白金 +$50",        key='p_white'):   sub_d += 50
+    if ca1.checkbox("白金（手鍊、手鐲）用 +$100", key='p_white_chain'): sub_d += 100
     if ca1.checkbox("雙色 +$100",       key='p_double'):  sub_d += 100
     if ca1.checkbox("噴砂、拉砂 +$100", key='p_sand'):    sub_d += 100
     # 右側：其餘
