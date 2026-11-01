@@ -404,6 +404,7 @@ with st.expander("🛠️ 執模台工", expanded=(section_nav == "🛠️ 執�
         # ── 金重計算（動態列）──
         st.markdown("#### 💰 金重計算")
         st.caption("輸入成品重量，先乘加工係數估算補料金料，再乘補料金額倍率計價")
+        casting_fee = st.number_input("鑄造工資（自填金額 $）", min_value=0, step=50, key="casting_fee")
 
         gw_n = st.session_state.gw_rows
         gw_amts = []
@@ -462,7 +463,7 @@ with st.expander("🛠️ 執模台工", expanded=(section_nav == "🛠️ 執�
             elif "封網底" in combo_choice: combo_fee = 500
 
         # 每件各自計算工費後加總，再加組合費
-        sub_a_labor = sum(calculate_jewelry_fee(p[0], p[1]) for p in mold_parts) + combo_fee
+        sub_a_labor = sum(calculate_jewelry_fee(p[0], p[1]) for p in mold_parts) + combo_fee + casting_fee
 
         # 手動補充工費（不走自動計算時可直接填入）
         st.write("---")
@@ -483,6 +484,7 @@ with st.expander("🛠️ 執模台工", expanded=(section_nav == "🛠️ 執�
         mold_desc = "+".join(f"{p[1]}{p[0]:.3f}錢" for p in mold_parts if p[0] > 0)
         if mold_desc_extra: mold_desc += ("+" if mold_desc else "") + mold_desc_extra
         if combo_fee > 0: mold_desc += f"(組合件+${combo_fee})"
+        if casting_fee > 0: mold_desc += ("+" if mold_desc else "") + f"鑄造工資${casting_fee}"
 
         st.markdown(
             f"<div style='background:#e8f4f8;border-left:4px solid #4682B4;padding:8px 14px;"
