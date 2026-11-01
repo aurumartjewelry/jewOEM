@@ -67,7 +67,7 @@ def get_material_base_price(mat, g_sell, p_sell_pt):
     elif mat == "9K(375)":
         return g_sell * 0.375
     elif mat == "Pt950":
-        return p_sell_pt
+        return p_sell_pt * 0.95
     return 0.0
 
 def backcalculate_weight_loss(weight, multiplier):
