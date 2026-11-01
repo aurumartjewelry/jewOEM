@@ -59,7 +59,7 @@ def get_stone_price(w):
     return 800
 
 def get_material_base_price(mat, g_sell, p_sell_pt):
-    """依材質取得每錢的基本賣出價（不含損耗，損耗由使用者填入）"""
+    """依材質取得每錢的基本賣出價（倍率調整由使用者填入）。"""
     if mat == "18K(750)":
         return g_sell * 0.75
     elif mat == "14K(585)":
@@ -69,6 +69,25 @@ def get_material_base_price(mat, g_sell, p_sell_pt):
     elif mat == "Pt950":
         return p_sell_pt
     return 0.0
+
+def backcalculate_weight_loss(weight, multiplier):
+    """以重量倍率回推原始重量與損耗率（損耗佔目前重量）。"""
+    if weight <= 0 or multiplier <= 0:
+        return 0.0, 0.0
+    original_weight = weight / multiplier
+    loss_percent = (1 - 1 / multiplier) * 100
+    return loss_percent, original_weight
+
+def weight_loss_caption(weight, multiplier):
+    """呈現倍率反推的預估損耗率與原始重量。"""
+    loss_percent, original_weight = backcalculate_weight_loss(weight, multiplier)
+    return f"預估損耗 {loss_percent:.1f}%（以目前重量為基準）｜原始重量約 {original_weight:.3f} 錢"
+
+def walkin_loss_add(mat):
+    """零售新訂模式的金料倍率加成。"""
+    if not is_walkin:
+        return 0.0
+    return 0.3 if mat == "Pt950" else 0.25
 
 # 戒圍改大補料金料估算：沿用 ring_resize_calculator.py 的戒圍表與體積公式
 _RING_DIAMETER_MM = {
@@ -383,7 +402,7 @@ with st.expander("🛠️ 執模台工", expanded=(section_nav == "🛠️ 執�
     if do_mold:
         # ── 金重計算（動態列）──
         st.markdown("#### 💰 金重計算")
-        st.caption("帶入黃金／白金賣出價，損耗倍率自行填入")
+        st.caption("帶入黃金／白金賣出價，金料倍率可自行調整")
 
         gw_n = st.session_state.gw_rows
         gw_amts = []
@@ -391,7 +410,8 @@ with st.expander("🛠️ 執模台工", expanded=(section_nav == "🛠️ 執�
             gc1, gc2, gc3, gc4 = st.columns([2, 2, 2, 2])
             mat  = gc1.selectbox("成色", ["18K(750)", "14K(585)", "9K(375)", "Pt950"], key=f'gw_mat_{i}')
             wt   = gc2.number_input("重量(錢)", min_value=0.0, step=0.001, format="%.3f", key=f'gw_w_{i}')
-            loss = gc3.number_input("損耗", min_value=1.0, max_value=2.0, value=1.35, step=0.01, key=f'gw_loss_{i}')
+            loss = gc3.number_input("倍率", min_value=1.0, max_value=2.0, value=1.35, step=0.01, key=f'gw_loss_{i}')
+            gc3.caption(weight_loss_caption(wt, loss))
             base = get_material_base_price(mat, g_sell, p_sell_pt)
             amt  = int(wt * int(base * loss))
             gc4.metric("金額", f"${amt}", help=f"單價/錢: ${int(base*loss)}")
@@ -467,7 +487,7 @@ with st.expander("🛠️ 執模台工", expanded=(section_nav == "🛠️ 執�
             f"🔧 <b>執模工費小計：${sub_a_labor}</b></div>", unsafe_allow_html=True)
 
         if mold_desc:
-            gw_detail = "+".join(f"{a[0]}{a[1]:.3f}錢×{a[2]}" for a in gw_amts if a[1] > 0)
+            gw_detail = "+".join(f"{a[0]}{a[1]:.3f}錢×倍率{a[2]}" for a in gw_amts if a[1] > 0)
             details.append(f"執模[{mold_desc}](工${sub_a_labor}|金{gw_detail}=${sub_a_gold})")
             simple_details.append("執模")
 
@@ -671,7 +691,7 @@ with st.expander("💍 改圍加價", expanded=(section_nav == "💍 改圍加�
                 help="只套用在建議補料重量估算。",
             )
             resize_loss_factor = factor_col2.number_input(
-                "補料損耗係數", min_value=1.0, value=1.35,
+                "補料金額倍率", min_value=1.0, value=1.35,
                 step=0.01, format="%.2f", key="resize_loss_factor",
                 help="只套用在金料金額計算。",
             )
@@ -685,6 +705,7 @@ with st.expander("💍 改圍加價", expanded=(section_nav == "💍 改圍加�
             )
             if resize_to > resize_from and resize_width > 0 and resize_thickness > 0:
                 st.caption(f"理論增重約 {theoretical_resize_g:.3f} g；套用加工係數 {resize_process_factor:.2f} 後，建議投入補料約 {estimated_resize_qian:.3f} 錢。")
+            factor_col1.caption(weight_loss_caption(estimated_resize_qian, resize_process_factor))
             if use_estimated_resize_weight:
                 bw = estimated_resize_qian
             else:
@@ -698,12 +719,13 @@ with st.expander("💍 改圍加價", expanded=(section_nav == "💍 改圍加�
             if not use_estimated_resize_weight:
                 bw = manual_bw
             st.caption(f"目前計價補料金料：{bw:.3f} 錢")
+            factor_col2.caption(weight_loss_caption(bw, resize_loss_factor))
             b_base = get_material_base_price(b_mat2, g_sell, p_sell_pt)
             b_unit = int(b_base * resize_loss_factor)
             b_amt  = int(bw * b_unit)
             st.metric("估算金料金額", f"${b_amt:,}", help=f"單價/錢: ${b_unit}")
             sub_c += b_amt
-            resize_gold_desc = f"{b_mat2}{bw:.3f}錢×損耗{resize_loss_factor:.2f}=${b_amt}（加工{resize_process_factor:.2f}；# {resize_from:g}→# {resize_to:g}）" if bw > 0 else f"# {resize_from:g}→# {resize_to:g}"
+            resize_gold_desc = f"{b_mat2}{bw:.3f}錢×倍率{resize_loss_factor:.2f}=${b_amt}（加工倍率{resize_process_factor:.2f}；# {resize_from:g}→# {resize_to:g}）" if bw > 0 else f"# {resize_from:g}→# {resize_to:g}"
         else:
             resize_gold_desc = ""
         if resize_gold_desc:
@@ -738,15 +760,17 @@ with st.expander("🔨 維修", expanded=(section_nav == "🔨 維修")):
     comb_q  = ce1.number_input("次數", min_value=0, step=1, key='comb_q')
     comb_m2 = ce2.selectbox("成色", ["18K(750)", "14K(585)", "9K(375)", "Pt950"], key='comb_m2')
     comb_w  = ce3.number_input("金料(錢)", min_value=0.0, step=0.001, format="%.3f", key='comb_w')
-    comb_loss = ce4.number_input("損耗", min_value=1.0, max_value=2.0, value=1.35, step=0.01, key='comb_loss')
+    comb_loss = ce4.number_input("倍率", min_value=1.0, max_value=2.0, value=1.35, step=0.01, key='comb_loss')
+    comb_loss_eff = comb_loss + walkin_loss_add(comb_m2)
+    ce4.caption(weight_loss_caption(comb_w, comb_loss_eff))
     comb_base = get_material_base_price(comb_m2, g_sell, p_sell_pt)
-    comb_unit = int(comb_base * comb_loss)
+    comb_unit = int(comb_base * comb_loss_eff)
     comb_gold_amt = int(comb_w * comb_unit)
     ce5.metric("金料金額", f"${comb_gold_amt}", help=f"單價/錢: ${comb_unit}")
     comb_labor = comb_q * 150
     sub_e += comb_labor + comb_gold_amt
     if comb_q > 0:
-        details.append(f"補爪×{comb_q}({comb_m2}{comb_w:.3f}錢×{comb_loss},${comb_gold_amt})")
+        details.append(f"補爪×{comb_q}({comb_m2}{comb_w:.3f}錢×倍率{comb_loss_eff:.2f},${comb_gold_amt})")
         simple_details.append(f"補爪×{comb_q}")
         repair_detail_items.append(f"補爪×{comb_q}")
 
@@ -756,14 +780,16 @@ with st.expander("🔨 維修", expanded=(section_nav == "🔨 維修")):
     l_price   = le1.number_input("補金工資($)", min_value=0.0, step=10.0, key='laser_p')
     l_mat2    = le2.selectbox("成色", ["18K(750)", "14K(585)", "9K(375)", "Pt950"], key='laser_mat2')
     l_weight  = le3.number_input("金料(錢)", min_value=0.0, step=0.001, format="%.3f", key='laser_w')
-    l_loss    = le4.number_input("損耗", min_value=1.0, max_value=2.0, value=1.35, step=0.01, key='laser_loss')
+    l_loss    = le4.number_input("倍率", min_value=1.0, max_value=2.0, value=1.35, step=0.01, key='laser_loss')
+    l_loss_eff = l_loss + walkin_loss_add(l_mat2)
+    le4.caption(weight_loss_caption(l_weight, l_loss_eff))
     l_base    = get_material_base_price(l_mat2, g_sell, p_sell_pt)
-    l_unit    = int(l_base * l_loss)
+    l_unit    = int(l_base * l_loss_eff)
     l_gold_amt = int(l_weight * l_unit)
     le5.metric("金料金額", f"${l_gold_amt}", help=f"單價/錢: ${l_unit}")
     sub_e += l_price + l_gold_amt
     if l_weight > 0 or l_price > 0:
-        details.append(f"補金(工${int(l_price)},{l_mat2}{l_weight:.3f}錢×{l_loss},${l_gold_amt})")
+        details.append(f"補金(工${int(l_price)},{l_mat2}{l_weight:.3f}錢×倍率{l_loss_eff:.2f},${l_gold_amt})")
         simple_details.append("補金")
         repair_detail_items.append("補金")
 
@@ -920,12 +946,6 @@ with st.expander("✨ 拋光 / 電鍍", expanded=(section_nav == "✨ 拋光 / �
     total_sum += sub_d
 is_walkin        = (pricing_mode == "零售新訂報價（分項倍率）")
 
-def walkin_loss_add(mat):
-    """零售新訂模式下補金損耗加成"""
-    if not is_walkin: return 0.0
-    if mat == "Pt950": return 0.3
-    return 0.25
-
 # ── 計算各區塊金料（不加倍部分）──
 resize_gold = 0
 if st.session_state.get('do_resize', False) and st.session_state.get('r_big', False):
@@ -960,8 +980,8 @@ laser_loss_eff = laser_loss_val + walkin_loss_add(laser_m2_val)
 laser_gold_val = int(laser_w_val * int(laser_base_val * laser_loss_eff))
 
 repair_gold  = comb_gold_val + laser_gold_val
-repair_labor = sub_e - (int(comb_w_val * int(comb_base_val * comb_loss_val)) +
-                        int(laser_w_val * int(laser_base_val * laser_loss_val)))
+repair_labor = sub_e - (int(comb_w_val * int(comb_base_val * comb_loss_eff)) +
+                        int(laser_w_val * int(laser_base_val * laser_loss_eff)))
 
 wax_w_val    = st.session_state.get('wax_w', 0.0)
 wax_qty_val  = st.session_state.get('wax_qty', 1)
@@ -1063,7 +1083,7 @@ elif is_walkin:
     st.markdown(
         f"<div style='background:#fff0f0;border-left:4px solid #e00;padding:8px 14px;"
         f"border-radius:6px;margin:4px 0;color:#7a0000;font-size:13px;'>"
-        f"👤 零售新訂報價｜執模/鑲嵌/維修 ×3　改圍/電鍍 ×2.5　3D掃描/製圖 ×2　金料損耗+0.25（Pt+0.3）"
+        f"👤 零售新訂報價｜執模/鑲嵌/維修 ×3　改圍/電鍍 ×2.5　3D掃描/製圖 ×2　金料倍率加成+0.25（Pt+0.3）"
         f"</div>", unsafe_allow_html=True
     )
 
