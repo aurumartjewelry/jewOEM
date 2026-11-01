@@ -71,17 +71,17 @@ def get_material_base_price(mat, g_sell, p_sell_pt):
     return 0.0
 
 def backcalculate_weight_loss(weight, multiplier):
-    """以重量倍率回推原始重量與損耗率（損耗佔目前重量）。"""
+    """以成品重量和倍率回推加工前所需金料及其損耗率。"""
     if weight <= 0 or multiplier <= 0:
         return 0.0, 0.0
-    original_weight = weight / multiplier
-    loss_percent = (1 - 1 / multiplier) * 100
+    original_weight = weight * multiplier
+    loss_percent = ((original_weight - weight) / original_weight) * 100
     return loss_percent, original_weight
 
 def weight_loss_caption(weight, multiplier):
     """呈現倍率反推的預估損耗率與原始重量。"""
     loss_percent, original_weight = backcalculate_weight_loss(weight, multiplier)
-    return f"預估損耗 {loss_percent:.1f}%（以目前重量為基準）｜原始重量約 {original_weight:.3f} 錢"
+    return f"預估損耗 {loss_percent:.1f}%（以補料金料為基準）｜倍率後補料金料約 {original_weight:.3f} 錢"
 
 def walkin_loss_add(mat):
     """零售新訂模式的金料倍率加成。"""
